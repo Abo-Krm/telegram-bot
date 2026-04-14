@@ -2,12 +2,33 @@ import os
 import re
 import yt_dlp
 import instaloader
+import threading
 
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
+# =======================
+# ENV TOKEN
+# =======================
 TOKEN = os.getenv("BOT_TOKEN")
-# Initialize Instagram loader
+
+# =======================
+# FLASK WEB SERVER (REQUIRED FOR RENDER)
+# =======================
+app_web = Flask(__name__)
+
+@app_web.route("/")
+def home():
+    return "Bot is running"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app_web.run(host="0.0.0.0", port=port)
+
+# =======================
+# INSTALOADER SETUP
+# =======================
 L = instaloader.Instaloader(
     download_videos=True,
     download_video_thumbnails=False,
@@ -16,20 +37,23 @@ L = instaloader.Instaloader(
     post_metadata_txt_pattern=""
 )
 
-
+# =======================
+# MESSAGE HANDLER
+# =======================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text.strip()
 
     await update.message.reply_text("⏳ Processing your link...")
 
-    # Create temp folder
     if not os.path.exists("downloads"):
         os.mkdir("downloads")
 
     try:
 
-        # TikTok / Video (yt-dlp)
+        # =======================
+        # TIKTOK (yt-dlp)
+        # =======================
         if "tiktok.com" in text:
 
             ydl_opts = {
@@ -41,16 +65,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 info = ydl.extract_info(text, download=True)
                 filename = ydl.prepare_filename(info)
 
-            await update.message.reply_video(video=open(filename, "rb"))
+            with open(filename, "rb") as video:
+                await update.message.reply_video(video=video)
 
             os.remove(filename)
 
-
-        # Instagram
+        # =======================
+        # INSTAGRAM
+        # =======================
         elif "instagram.com" in text:
 
             shortcode = re.search(r"/(p|reel|tv)/([^/?]+)/", text)
-
 
             if not shortcode:
                 await update.message.reply_text("❌ Invalid Instagram link")
@@ -69,26 +94,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 path = f"downloads/{file}"
 
                 if file.endswith(".mp4"):
-                    await update.message.reply_video(video=open(path, "rb"))
+                    with open(path, "rb") as video:
+                        await update.message.reply_video(video=video)
 
                 elif file.endswith(".jpg"):
-                    await update.message.reply_photo(photo=open(path, "rb"))
+                    with open(path, "rb") as photo:
+                        await update.message.reply_photo(photo=photo)
 
                 os.remove(path)
-
 
         else:
             await update.message.reply_text("❌ Send Instagram or TikTok link only")
 
-
     except Exception as e:
-
         await update.message.reply_text("⚠️ Error downloading media")
         print(e)
 
-
+# =======================
+# START BOT
+# =======================
 def main():
 
+    # start flask web server (IMPORTANT FOR RENDER)
+    threading.Thread(target=run_web).start()
+
+    # telegram bot
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -97,6 +127,8 @@ def main():
 
     app.run_polling()
 
-
+# =======================
+# ENTRY POINT
+# =======================
 if __name__ == "__main__":
     main()

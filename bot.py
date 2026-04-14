@@ -6,8 +6,7 @@ import instaloader
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
-TOKEN = "8247975990:AAFWhYoDb9y8wf8K0cXcpcRT-KOGBMkV5VM"
-
+TOKEN = os.getenv("BOT_TOKEN")
 # Initialize Instagram loader
 L = instaloader.Instaloader(
     download_videos=True,
